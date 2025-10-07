@@ -10,15 +10,26 @@
         <a href="{% url 'employ:hr' %}" class="btn btn-outline-secondary">
             <i class="fas fa-arrow-left"></i> العودة إلى إدارة الموارد البشرية
         </a>
+        {% if can_edit_profile %}
+        <form method="post" action="{% url 'employ:employee_flip_profile' employee.pk %}" class="d-inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-info">
+                <i class="fas fa-sync-alt"></i> 
+                {% if employee.profile_flipped %}إلغاء القلب{% else %}قلب الملف{% endif %}
+            </button>
+        </form>
+        {% endif %}
         <a href="{% url 'employ:vacation_create' %}?employee={{ employee.pk }}" class="btn btn-outline-primary">
             <i class="fas fa-plane-departure"></i> طلب إجازة جديد
         </a>
         <a href="{% url 'employ:employee_advance_create' %}?employee={{ employee.pk }}" class="btn btn-warning">
             <i class="fas fa-hand-holding-usd"></i> إنشاء سلفة
         </a>
+        {% if not employee.profile_flipped %}
         <a href="{% url 'employ:employee_permissions' employee.pk %}" class="btn btn-info">
             <i class="fas fa-key"></i> إدارة الصلاحيات
         </a>
+        {% endif %}
     </div>
 </div>
 
@@ -30,6 +41,180 @@
     <div class="alert alert-warning">راتب الفترة {{ salary_period_label }} لم يُسجل بعد.</div>
 {% endif %}
 
+{% if employee.profile_flipped %}
+<!-- Flipped Profile View -->
+<div class="row g-3">
+    <div class="col-lg-8">
+        <div class="card shadow-sm mb-3">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">البيانات الشخصية - وضع التعديل</h5>
+                {% if can_edit_profile %}
+                <div class="btn-group">
+                    <a href="{% url 'employ:employee_edit_profile' employee.pk %}" class="btn btn-sm btn-primary">
+                        <i class="fas fa-edit"></i> تعديل الاسم
+                    </a>
+                    <a href="{% url 'employ:employee_change_password' employee.pk %}" class="btn btn-sm btn-warning">
+                        <i class="fas fa-key"></i> تغيير كلمة المرور
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <div class="small text-muted">اسم المستخدم</div>
+                        <div class="fw-bold">{{ employee.user.username }}</div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="small text-muted">الاسم الكامل</div>
+                        <div class="fw-bold">{{ employee.full_name }}</div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="small text-muted">البريد الإلكتروني</div>
+                        <div>{{ employee.user.email|default:"غير محدد" }}</div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="small text-muted">المسمى الوظيفي</div>
+                        <div>{{ employee.get_position_display }}</div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="small text-muted">رقم الجوال</div>
+                        <div>{{ employee.phone_number|default:"غير محدد" }}</div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="small text-muted">تاريخ التعيين</div>
+                        <div>{{ employee.hire_date|date:"Y-m-d"|default:"غير محدد" }}</div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="small text-muted">الراتب الشهري</div>
+                        <div class="fw-bold text-success">{{ employee.salary|floatformat:2 }} ل.س</div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="small text-muted">تاريخ آخر تسجيل دخول</div>
+                        <div>{{ employee.user.last_login|date:"Y-m-d H:i"|default:"لم يسجل دخول بعد" }}</div>
+                    </div>
+                </div>
+                
+                {% if active_codes %}
+                <hr>
+                <div class="alert alert-info">
+                    <h6><i class="fas fa-key"></i> رموز التحقق النشطة:</h6>
+                    <ul class="mb-0">
+                        {% for code in active_codes %}
+                        <li>
+                            <strong>{{ code.code }}</strong> - {{ code.get_purpose_display }}
+                            <small class="text-muted">(ينتهي: {{ code.expires_at|date:"Y-m-d H:i" }})</small>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <!-- باقي المحتوى بنفس الشكل -->
+        <div class="card shadow-sm mb-3">
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center">
+                <h5 class="mb-0">ملخص الراتب للفترة</h5>
+                <form method="get" class="row g-2 align-items-center">
+                    <div class="col-5">
+                        <select name="month" class="form-select form-select-sm">
+                            {% for month_number, month_label in months %}
+                                <option value="{{ month_number }}" {% if month_number == salary_month %}selected{% endif %}>{{ month_label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-4">
+                        <input type="number" name="year" class="form-control form-control-sm" value="{{ salary_year }}" min="1900" max="2100">
+                    </div>
+                    <div class="col-3">
+                        <button class="btn btn-sm btn-primary w-100">
+                            <i class="fas fa-sync"></i>
+                        </button>
+                    </div>
+                </form>
+            </div>
+            <div class="card-body">
+                <div class="row row-cols-1 row-cols-md-2 g-3 text-center">
+                    <div class="col">
+                        <div class="stat-card">
+                            <div class="stat-card-icon bg-primary"><i class="fas fa-money-check-alt"></i></div>
+                            <div class="stat-card-value">{{ salary_amount|floatformat:2 }}</div>
+                            <div class="stat-card-label">الراتب الإجمالي</div>
+                        </div>
+                    </div>
+                    <div class="col">
+                        <div class="stat-card">
+                            <div class="stat-card-icon bg-warning"><i class="fas fa-hand-holding-usd"></i></div>
+                            <div class="stat-card-value">{{ salary_period_advance_outstanding|floatformat:2 }}</div>
+                            <div class="stat-card-label">السلف المستحقة ({{ salary_period_label }})</div>
+                        </div>
+                    </div>
+                    <div class="col">
+                        <div class="stat-card">
+                            <div class="stat-card-icon bg-success"><i class="fas fa-wallet"></i></div>
+                            <div class="stat-card-value">{{ salary_period_remaining|floatformat:2 }}</div>
+                            <div class="stat-card-label">الصافي للدفع</div>
+                        </div>
+                    </div>
+                    <div class="col">
+                        <div class="stat-card">
+                            <div class="stat-card-icon {% if salary_status %}bg-success{% else %}bg-danger{% endif %}"><i class="fas fa-receipt"></i></div>
+                            <div class="stat-card-value">{% if salary_status %}مدفوع{% else %}غير مدفوع{% endif %}</div>
+                            <div class="stat-card-label">حالة راتب {{ salary_period_label }}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-4">
+        <!-- الإحصائيات والمعلومات الجانبية -->
+        <div class="card shadow-sm mb-3">
+            <div class="card-header">
+                <h5 class="mb-0">معلومات الحساب</h5>
+            </div>
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span>رقم الموظف</span>
+                    <span class="fw-bold">{{ employee.pk }}</span>
+                </div>
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span>حالة الحساب</span>
+                    <span class="badge bg-success">نشط</span>
+                </div>
+                <div class="d-flex justify-content-between align-items-center">
+                    <span>وضع الملف</span>
+                    <span class="badge bg-info">مقلوب</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card shadow-sm">
+            <div class="card-header">
+                <h5 class="mb-0">إجراءات سريعة</h5>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    {% if can_edit_profile %}
+                    <a href="{% url 'employ:employee_edit_profile' employee.pk %}" class="btn btn-outline-primary">
+                        <i class="fas fa-edit"></i> تعديل الاسم
+                    </a>
+                    <a href="{% url 'employ:employee_change_password' employee.pk %}" class="btn btn-outline-warning">
+                        <i class="fas fa-key"></i> تغيير كلمة المرور
+                    </a>
+                    {% endif %}
+                    <a href="{% url 'employ:vacation_create' %}?employee={{ employee.pk }}" class="btn btn-outline-success">
+                        <i class="fas fa-plane-departure"></i> طلب إجازة
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% else %}
+<!-- Normal Profile View -->
 <div class="row g-3">
     <div class="col-lg-8">
         <div class="card shadow-sm mb-3">
@@ -388,6 +573,7 @@
         </div>
     </div>
 </div>
+{% endif %}
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {

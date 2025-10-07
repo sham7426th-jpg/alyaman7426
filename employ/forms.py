@@ -8,6 +8,140 @@ from decimal import Decimal
 from .models import Teacher, Employee, Vacation
 
 
+class EmployeeProfileEditForm(forms.ModelForm):
+    """نموذج تعديل الملف الشخصي للموظف - محدود للاسم فقط"""
+    
+    first_name = forms.CharField(
+        max_length=30,
+        label='الاسم الأول',
+        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'أدخل الاسم الأول'})
+    )
+    last_name = forms.CharField(
+        max_length=30,
+        label='الاسم الأخير',
+        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'أدخل الاسم الأخير'})
+    )
+    
+    class Meta:
+        model = Employee
+        fields = []  # لا نسمح بتعديل حقول Employee مباشرة
+    
+    def __init__(self, *args, **kwargs):
+        self.user = kwargs.pop('user', None)
+        super().__init__(*args, **kwargs)
+        
+        if self.user:
+            self.fields['first_name'].initial = self.user.first_name
+            self.fields['last_name'].initial = self.user.last_name
+    
+    def save(self, commit=True):
+        if self.user and commit:
+            self.user.first_name = self.cleaned_data['first_name']
+            self.user.last_name = self.cleaned_data['last_name']
+            self.user.save(update_fields=['first_name', 'last_name'])
+        return super().save(commit)
+
+
+class EmployeePasswordChangeForm(forms.Form):
+    """نموذج تغيير كلمة المرور للموظف"""
+    
+    current_password = forms.CharField(
+        widget=forms.PasswordInput(attrs={'class': 'form-control', 'placeholder': 'كلمة المرور الحالية'}),
+        label='كلمة المرور الحالية'
+    )
+    new_password1 = forms.CharField(
+        widget=forms.PasswordInput(attrs={'class': 'form-control', 'placeholder': 'كلمة المرور الجديدة'}),
+        label='كلمة المرور الجديدة',
+        min_length=8
+    )
+    new_password2 = forms.CharField(
+        widget=forms.PasswordInput(attrs={'class': 'form-control', 'placeholder': 'تأكيد كلمة المرور الجديدة'}),
+        label='تأكيد كلمة المرور الجديدة'
+    )
+    
+    def __init__(self, user, *args, **kwargs):
+        self.user = user
+        super().__init__(*args, **kwargs)
+    
+    def clean_current_password(self):
+        current_password = self.cleaned_data.get('current_password')
+        if not self.user.check_password(current_password):
+            raise forms.ValidationError('كلمة المرور الحالية غير صحيحة')
+        return current_password
+    
+    def clean(self):
+        cleaned_data = super().clean()
+        new_password1 = cleaned_data.get('new_password1')
+        new_password2 = cleaned_data.get('new_password2')
+        
+        if new_password1 and new_password2:
+            if new_password1 != new_password2:
+                raise forms.ValidationError('كلمات المرور الجديدة غير متطابقة')
+        
+        return cleaned_data
+    
+    def save(self):
+        password = self.cleaned_data['new_password1']
+        self.user.set_password(password)
+        self.user.save()
+        return self.user
+
+
+class OneTimeCodeForm(forms.Form):
+    """نموذج إدخال رمز الاستخدام الواحد"""
+    
+    code = forms.CharField(
+        max_length=10,
+        widget=forms.TextInput(attrs={
+            'class': 'form-control text-center',
+            'placeholder': 'أدخل الرمز',
+            'style': 'letter-spacing: 2px; font-size: 18px; font-weight: bold;'
+        }),
+        label='رمز التحقق'
+    )
+    
+    def __init__(self, employee, purpose, *args, **kwargs):
+        self.employee = employee
+        self.purpose = purpose
+        super().__init__(*args, **kwargs)
+    
+    def clean_code(self):
+        code = self.cleaned_data.get('code', '').upper().strip()
+        
+        if not code:
+            raise forms.ValidationError('يرجى إدخال رمز التحقق')
+        
+        # البحث عن الرمز
+        try:
+            from .models import OneTimeCode
+            one_time_code = OneTimeCode.objects.get(
+                employee=self.employee,
+                code=code,
+                purpose=self.purpose
+            )
+            
+            if not one_time_code.is_valid:
+                if one_time_code.is_used:
+                    raise forms.ValidationError('هذا الرمز تم استخدامه من قبل')
+                elif one_time_code.is_expired:
+                    raise forms.ValidationError('هذا الرمز منتهي الصلاحية')
+                else:
+                    raise forms.ValidationError('رمز غير صالح')
+            
+            self.one_time_code = one_time_code
+            
+        except OneTimeCode.DoesNotExist:
+            raise forms.ValidationError('رمز التحقق غير صحيح')
+        
+        return code
+    
+    def use_code(self):
+        """استخدام الرمز"""
+        if hasattr(self, 'one_time_code'):
+            return self.one_time_code.use_code()
+        return False
+
+
 class TeacherForm(forms.ModelForm):
     branches = forms.MultipleChoiceField(
         choices=Teacher.BranchChoices.choices,

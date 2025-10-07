@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Employee, Teacher, Vacation, EmployeePermission
+from .models import Employee, Teacher, Vacation, EmployeePermission, OneTimeCode
 
 @admin.register(Employee)
 class EmployeeAdmin(admin.ModelAdmin):
@@ -7,7 +7,7 @@ class EmployeeAdmin(admin.ModelAdmin):
     نسخة آمنة لا تعتمد على حقول غير موجودة.
     إذا كانت لديك حقول مثل position/hire_date/salary لاحقًا، أضفها هنا.
     """
-    list_display = ('full_name_display', 'username_display',)
+    list_display = ('full_name_display', 'username_display', 'profile_flipped')
     search_fields = ('user__first_name', 'user__last_name', 'user__username',)
     ordering = ('-id',)
 
@@ -48,3 +48,21 @@ class EmployeePermissionAdmin(admin.ModelAdmin):
     list_filter = ('permission', 'is_granted', 'granted_at')
     search_fields = ('employee__user__first_name', 'employee__user__last_name', 'employee__user__username')
     ordering = ('-granted_at',)
+
+@admin.register(OneTimeCode)
+class OneTimeCodeAdmin(admin.ModelAdmin):
+    list_display = ('code', 'employee', 'purpose', 'is_used', 'is_expired_display', 'created_by', 'created_at')
+    list_filter = ('purpose', 'is_used', 'created_at')
+    search_fields = ('code', 'employee__user__first_name', 'employee__user__last_name', 'employee__user__username')
+    readonly_fields = ('code', 'is_used', 'used_at', 'created_at')
+    ordering = ('-created_at',)
+    
+    @admin.display(description='منتهي الصلاحية', boolean=True)
+    def is_expired_display(self, obj):
+        return obj.is_expired
+    
+    def has_change_permission(self, request, obj=None):
+        # منع تعديل الرموز المستخدمة
+        if obj and obj.is_used:
+            return False
+        return super().has_change_permission(request, obj)

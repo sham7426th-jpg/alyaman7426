@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+
+{% load emp_perms %}
+{% load static %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card shadow-sm">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0 text-center">
+                        <i class="fas fa-edit me-2"></i>
+                        تعديل الملف الشخصي
+                    </h4>
+                    <p class="text-center mb-0 mt-2">يمكنك تعديل الاسم فقط باستخدام رمز التحقق</p>
+                </div>
+                <div class="card-body">
+                    {% include "partials/_alerts.html" %}
+                    
+                    <!-- معلومات الموظف -->
+                    <div class="alert alert-info">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <strong>الموظف:</strong> {{ employee.full_name }}
+                            </div>
+                            <div class="col-md-6">
+                                <strong>المسمى الوظيفي:</strong> {{ employee.get_position_display }}
+                            </div>
+                        </div>
+                        <div class="row mt-2">
+                            <div class="col-md-6">
+                                <strong>اسم المستخدم:</strong> {{ employee.user.username }}
+                            </div>
+                            <div class="col-md-6">
+                                <strong>البريد الإلكتروني:</strong> {{ employee.user.email|default:"غير محدد" }}
+                            </div>
+                        </div>
+                    </div>
+
+                    <form method="POST">
+                        {% csrf_token %}
+                        
+                        <!-- رمز التحقق -->
+                        <div class="card bg-light mb-4">
+                            <div class="card-body">
+                                <h6 class="card-title">
+                                    <i class="fas fa-shield-alt text-warning"></i>
+                                    رمز التحقق المطلوب
+                                </h6>
+                                <p class="text-muted mb-3">
+                                    يجب الحصول على رمز تحقق من المشرف لتعديل البيانات الشخصية
+                                </p>
+                                
+                                <div class="form-group">
+                                    {{ code_form.code.label_tag }}
+                                    {{ code_form.code }}
+                                    {% if code_form.code.errors %}
+                                    <div class="text-danger small mt-1">
+                                        {% for error in code_form.code.errors %}
+                                            {{ error }}
+                                        {% endfor %}
+                                    </div>
+                                    {% endif %}
+                                    <small class="form-text text-muted">
+                                        اطلب من المشرف إنشاء رمز تحقق لتعديل الملف الشخصي
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- نموذج تعديل الاسم -->
+                        <div class="card">
+                            <div class="card-header">
+                                <h6 class="mb-0">
+                                    <i class="fas fa-user text-primary"></i>
+                                    تعديل الاسم
+                                </h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        {{ form.first_name.label_tag }}
+                                        {{ form.first_name }}
+                                        {% if form.first_name.errors %}
+                                        <div class="text-danger small mt-1">
+                                            {% for error in form.first_name.errors %}
+                                                {{ error }}
+                                            {% endfor %}
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                    
+                                    <div class="col-md-6 mb-3">
+                                        {{ form.last_name.label_tag }}
+                                        {{ form.last_name }}
+                                        {% if form.last_name.errors %}
+                                        <div class="text-danger small mt-1">
+                                            {% for error in form.last_name.errors %}
+                                                {{ error }}
+                                            {% endfor %}
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                
+                                <div class="alert alert-warning">
+                                    <i class="fas fa-exclamation-triangle"></i>
+                                    <strong>تنبيه:</strong> تعديل الاسم سيؤثر على جميع السجلات المرتبطة بحسابك
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="d-flex justify-content-center gap-3 mt-4">
+                            <button type="submit" class="btn btn-primary px-4">
+                                <i class="fas fa-save me-2"></i>
+                                حفظ التغييرات
+                            </button>
+                            <a href="{% url 'employ:employee_profile' employee.pk %}" class="btn btn-secondary px-4">
+                                <i class="fas fa-times me-2"></i>
+                                إلغاء
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- معلومات إضافية -->
+<div class="container py-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title">كيفية الحصول على رمز التحقق</h5>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i>
+                        <strong>خطوات الحصول على رمز التحقق:</strong>
+                        <ol class="mt-2 mb-0">
+                            <li>تواصل مع المشرف أو مدير النظام</li>
+                            <li>اطلب إنشاء رمز تحقق لتعديل الملف الشخصي</li>
+                            <li>سيقوم المشرف بإنشاء رمز صالح لمدة 24 ساعة</li>
+                            <li>استخدم الرمز لتعديل بياناتك الشخصية</li>
+                            <li>الرمز صالح للاستخدام مرة واحدة فقط</li>
+                        </ol>
+                    </div>
+                    
+                    {% if user.is_superuser %}
+                    <div class="alert alert-success">
+                        <i class="fas fa-crown"></i>
+                        <strong>أنت مشرف:</strong> يمكنك إنشاء رموز التحقق للموظفين
+                        <br>
+                        <a href="{% url 'employ:generate_one_time_code' employee.pk %}" class="btn btn-sm btn-success mt-2">
+                            <i class="fas fa-plus"></i> إنشاء رمز تحقق
+                        </a>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

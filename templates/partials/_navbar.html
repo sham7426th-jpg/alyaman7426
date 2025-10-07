@@ -1,6 +1,16 @@
 {% load emp_perms %}
 {% load static emp_perms %}
 {% if user.is_authenticated %}
+<!-- Check if current user has flipped profile -->
+{% with employee_profile=user.employee_profile %}
+{% if employee_profile.profile_flipped %}
+<!-- Flipped profile - hide navbar -->
+<style>
+.sidebar { display: none !important; }
+.main-content { margin-right: 0 !important; }
+</style>
+{% else %}
+<!-- Normal navbar display -->
 <!-- Mobile menu toggle button -->
 <button class="mobile-menu-toggle d-md-none" onclick="toggleSidebar()">
     <i class="fas fa-bars"></i>
@@ -157,6 +167,8 @@
         </form>
     </div>
 </div>
+{% endif %}
+{% endwith %}
 {% else %}
 <!-- واجهة المستخدم غير المسجل دخولاً -->
 <div class="sidebar">

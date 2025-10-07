@@ -1,0 +1,211 @@
+{% extends "base.html" %}
+
+{% load emp_perms %}
+{% load static %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="row justify-content-center">
+        <div class="col-md-10">
+            <div class="card shadow-sm">
+                <div class="card-header bg-success text-white">
+                    <h4 class="mb-0 text-center">
+                        <i class="fas fa-key me-2"></i>
+                        إنشاء رمز تحقق للموظف: {{ employee.full_name }}
+                    </h4>
+                    <p class="text-center mb-0 mt-2">إنشاء رموز الاستخدام الواحد للموظفين</p>
+                </div>
+                <div class="card-body">
+                    {% include "partials/_alerts.html" %}
+                    
+                    <!-- معلومات الموظف -->
+                    <div class="alert alert-info">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <strong>الموظف:</strong> {{ employee.full_name }}
+                            </div>
+                            <div class="col-md-4">
+                                <strong>المسمى الوظيفي:</strong> {{ employee.get_position_display }}
+                            </div>
+                            <div class="col-md-4">
+                                <strong>اسم المستخدم:</strong> {{ employee.user.username }}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- نموذج إنشاء رمز جديد -->
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h6 class="mb-0">
+                                <i class="fas fa-plus text-success"></i>
+                                إنشاء رمز جديد
+                            </h6>
+                        </div>
+                        <div class="card-body">
+                            <form method="POST">
+                                {% csrf_token %}
+                                
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <label for="purpose" class="form-label">
+                                            <i class="fas fa-bullseye me-1"></i>
+                                            الغرض من الرمز <span class="text-danger">*</span>
+                                        </label>
+                                        <select name="purpose" id="purpose" class="form-control" required>
+                                            <option value="">-- اختر الغرض --</option>
+                                            <option value="name_change">تغيير الاسم</option>
+                                            <option value="password_change">تغيير كلمة المرور</option>
+                                            <option value="profile_edit">تعديل الملف الشخصي</option>
+                                        </select>
+                                    </div>
+                                    
+                                    <div class="col-md-6 mb-3">
+                                        <label for="expires_hours" class="form-label">
+                                            <i class="fas fa-clock me-1"></i>
+                                            مدة الصلاحية (ساعات)
+                                        </label>
+                                        <select name="expires_hours" id="expires_hours" class="form-control">
+                                            <option value="1">ساعة واحدة</option>
+                                            <option value="6">6 ساعات</option>
+                                            <option value="12">12 ساعة</option>
+                                            <option value="24" selected>24 ساعة (يوم كامل)</option>
+                                            <option value="48">48 ساعة (يومين)</option>
+                                            <option value="72">72 ساعة (3 أيام)</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div class="text-center">
+                                    <button type="submit" class="btn btn-success px-4">
+                                        <i class="fas fa-plus me-2"></i>
+                                        إنشاء رمز التحقق
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- الرموز النشطة -->
+                    {% if active_codes %}
+                    <div class="card">
+                        <div class="card-header">
+                            <h6 class="mb-0">
+                                <i class="fas fa-list text-primary"></i>
+                                الرموز النشطة ({{ active_codes.count }})
+                            </h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>الرمز</th>
+                                            <th>الغرض</th>
+                                            <th>تاريخ الإنشاء</th>
+                                            <th>تاريخ الانتهاء</th>
+                                            <th>الحالة</th>
+                                            <th>أنشأ بواسطة</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for code in active_codes %}
+                                        <tr>
+                                            <td>
+                                                <code class="bg-light p-2 rounded">{{ code.code }}</code>
+                                            </td>
+                                            <td>
+                                                <span class="badge 
+                                                    {% if code.purpose == 'name_change' %}bg-primary
+                                                    {% elif code.purpose == 'password_change' %}bg-warning
+                                                    {% else %}bg-info{% endif %}">
+                                                    {{ code.get_purpose_display }}
+                                                </span>
+                                            </td>
+                                            <td>{{ code.created_at|date:"Y-m-d H:i" }}</td>
+                                            <td>{{ code.expires_at|date:"Y-m-d H:i" }}</td>
+                                            <td>
+                                                {% if code.is_valid %}
+                                                    <span class="badge bg-success">صالح</span>
+                                                {% elif code.is_used %}
+                                                    <span class="badge bg-secondary">مستخدم</span>
+                                                {% else %}
+                                                    <span class="badge bg-danger">منتهي</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                <small>{{ code.created_by.get_full_name|default:code.created_by.username }}</small>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    {% else %}
+                    <div class="card">
+                        <div class="card-body text-center">
+                            <i class="fas fa-key fa-3x text-muted mb-3"></i>
+                            <h6 class="text-muted">لا توجد رموز نشطة</h6>
+                            <p class="text-muted">لا توجد رموز تحقق نشطة لهذا الموظف</p>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <div class="text-center mt-4">
+                        <a href="{% url 'employ:employee_profile' employee.pk %}" class="btn btn-outline-secondary px-4">
+                            <i class="fas fa-arrow-left me-2"></i>
+                            العودة لملف الموظف
+                        </a>
+                        <a href="{% url 'employ:hr' %}" class="btn btn-outline-primary px-4">
+                            <i class="fas fa-users me-2"></i>
+                            إدارة الموظفين
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- معلومات إضافية -->
+<div class="container py-4">
+    <div class="row justify-content-center">
+        <div class="col-md-10">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title">معلومات رموز التحقق</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6>خصائص الرموز:</h6>
+                            <ul class="list-unstyled">
+                                <li><i class="fas fa-check text-success"></i> رموز عشوائية من 8 أحرف</li>
+                                <li><i class="fas fa-check text-success"></i> صالحة لاستخدام واحد فقط</li>
+                                <li><i class="fas fa-check text-success"></i> لها تاريخ انتهاء محدد</li>
+                                <li><i class="fas fa-check text-success"></i> مرتبطة بغرض محدد</li>
+                                <li><i class="fas fa-check text-success"></i> يتم تسجيل جميع الاستخدامات</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>أغراض الرموز:</h6>
+                            <ul class="list-unstyled">
+                                <li><i class="fas fa-user text-primary"></i> <strong>تغيير الاسم:</strong> تعديل الاسم الأول والأخير</li>
+                                <li><i class="fas fa-key text-warning"></i> <strong>تغيير كلمة المرور:</strong> تحديث كلمة مرور الحساب</li>
+                                <li><i class="fas fa-edit text-info"></i> <strong>تعديل الملف:</strong> تعديل عام للملف الشخصي</li>
+                            </ul>
+                        </div>
+                    </div>
+                    
+                    <div class="alert alert-warning mt-3">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <strong>ملاحظة أمنية:</strong> تأكد من إعطاء الرمز للموظف المناسب فقط ولا تشاركه مع أحد آخر. 
+                        الرموز حساسة وتؤثر على أمان النظام.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -35,6 +35,9 @@ class Employee(models.Model):
     ]
     position = models.CharField(max_length=50, choices=POSITION_CHOICES, default='staff', verbose_name='الوظيفة')
 
+    # Profile flip functionality
+    profile_flipped = models.BooleanField(default=False, verbose_name='ملف شخصي مقلوب')
+    
     def __str__(self):
         return self.full_name or (self.user.get_username() if self.user_id else 'Employee')
 
@@ -90,6 +93,74 @@ class Employee(models.Model):
         return get_or_create_employee_salary_account(self)
 
 
+class OneTimeCode(models.Model):
+    """رموز الاستخدام الواحد للموظفين لتعديل البيانات الشخصية"""
+    
+    employee = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name='one_time_codes')
+    code = models.CharField(max_length=10, unique=True, verbose_name='الرمز')
+    purpose = models.CharField(max_length=50, choices=[
+        ('name_change', 'تغيير الاسم'),
+        ('password_change', 'تغيير كلمة المرور'),
+        ('profile_edit', 'تعديل الملف الشخصي'),
+    ], verbose_name='الغرض')
+    is_used = models.BooleanField(default=False, verbose_name='مستخدم')
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name='أنشأ بواسطة')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='تاريخ الإنشاء')
+    used_at = models.DateTimeField(null=True, blank=True, verbose_name='تاريخ الاستخدام')
+    expires_at = models.DateTimeField(verbose_name='تاريخ الانتهاء')
+    
+    class Meta:
+        verbose_name = 'رمز الاستخدام الواحد'
+        verbose_name_plural = 'رموز الاستخدام الواحد'
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.employee.full_name} - {self.code} - {self.get_purpose_display()}"
+    
+    @property
+    def is_expired(self):
+        return timezone.now() > self.expires_at
+    
+    @property
+    def is_valid(self):
+        return not self.is_used and not self.is_expired
+    
+    def use_code(self):
+        """استخدام الرمز وتسجيل وقت الاستخدام"""
+        if self.is_valid:
+            self.is_used = True
+            self.used_at = timezone.now()
+            self.save(update_fields=['is_used', 'used_at'])
+            return True
+        return False
+    
+    @classmethod
+    def generate_code(cls, employee, purpose, created_by, expires_hours=24):
+        """إنشاء رمز جديد للموظف"""
+        import random
+        import string
+        from datetime import timedelta
+        
+        # إنشاء رمز عشوائي
+        code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
+        
+        # التأكد من عدم تكرار الرمز
+        while cls.objects.filter(code=code).exists():
+            code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
+        
+        # إنشاء تاريخ الانتهاء
+        expires_at = timezone.now() + timedelta(hours=expires_hours)
+        
+        # إنشاء الرمز
+        one_time_code = cls.objects.create(
+            employee=employee,
+            code=code,
+            purpose=purpose,
+            created_by=created_by,
+            expires_at=expires_at
+        )
+        
+        return one_time_code
 class EmployeePermission(models.Model):
     """صلاحيات الميزات تُمنح مباشرةً للموظّف (ليست أدوار ولا Groups)."""
 

@@ -17,7 +17,7 @@ from accounts.forms import EmployeeAdvanceForm
 from attendance.models import TeacherAttendance
 
 from .models import Teacher, Employee, Vacation, EmployeePermission
-from .forms import TeacherForm, EmployeeRegistrationForm, AdminVacationForm
+from .forms import TeacherForm, EmployeeRegistrationForm, AdminVacationForm, EmployeeProfileEditForm, EmployeePasswordChangeForm, OneTimeCodeForm
 
 
 # -----------------------------
@@ -146,6 +146,195 @@ class EmployeePermissionsView(LoginRequiredMixin, View):
 
         messages.success(request, f'تم تحديث صلاحيات الموظف { _employee_full_name(employee) } بنجاح.')
         return redirect('employ:employee_permissions', pk=pk)
+
+
+# -----------------------------
+# إدارة الملف الشخصي المقلوب
+# -----------------------------
+class EmployeeFlipProfileView(LoginRequiredMixin, View):
+    """تبديل حالة الملف الشخصي المقلوب"""
+    
+    def post(self, request, pk):
+        employee = get_object_or_404(Employee, pk=pk)
+        
+        # التحقق من الصلاحية - الموظف يمكنه تبديل ملفه الشخصي فقط
+        if request.user != employee.user and not request.user.is_superuser:
+            messages.error(request, 'لا يمكنك تبديل ملف موظف آخر')
+            return redirect('employ:employee_profile', pk=pk)
+        
+        # تبديل الحالة
+        employee.profile_flipped = not employee.profile_flipped
+        employee.save(update_fields=['profile_flipped'])
+        
+        status = 'مقلوب' if employee.profile_flipped else 'عادي'
+        messages.success(request, f'تم تبديل الملف الشخصي إلى الوضع {status}')
+        
+        return redirect('employ:employee_profile', pk=pk)
+
+
+class EmployeeEditProfileView(LoginRequiredMixin, View):
+    """تعديل الملف الشخصي للموظف مع التحقق من الرمز"""
+    
+    template_name = 'employ/employee_edit_profile.html'
+    
+    def get(self, request, pk):
+        employee = get_object_or_404(Employee, pk=pk)
+        
+        # التحقق من الصلاحية
+        if request.user != employee.user and not request.user.is_superuser:
+            messages.error(request, 'لا يمكنك تعديل ملف موظف آخر')
+            return redirect('employ:employee_profile', pk=pk)
+        
+        form = EmployeeProfileEditForm(instance=employee, user=employee.user)
+        code_form = OneTimeCodeForm(employee=employee, purpose='profile_edit')
+        
+        return render(request, self.template_name, {
+            'employee': employee,
+            'form': form,
+            'code_form': code_form,
+        })
+    
+    def post(self, request, pk):
+        employee = get_object_or_404(Employee, pk=pk)
+        
+        # التحقق من الصلاحية
+        if request.user != employee.user and not request.user.is_superuser:
+            messages.error(request, 'لا يمكنك تعديل ملف موظف آخر')
+            return redirect('employ:employee_profile', pk=pk)
+        
+        form = EmployeeProfileEditForm(request.POST, instance=employee, user=employee.user)
+        code_form = OneTimeCodeForm(employee=employee, purpose='profile_edit', data=request.POST)
+        
+        if form.is_valid() and code_form.is_valid():
+            # استخدام الرمز
+            if code_form.use_code():
+                form.save()
+                messages.success(request, 'تم تحديث الملف الشخصي بنجاح')
+                return redirect('employ:employee_profile', pk=pk)
+            else:
+                messages.error(request, 'فشل في استخدام رمز التحقق')
+        
+        return render(request, self.template_name, {
+            'employee': employee,
+            'form': form,
+            'code_form': code_form,
+        })
+
+
+class EmployeeChangePasswordView(LoginRequiredMixin, View):
+    """تغيير كلمة مرور الموظف مع التحقق من الرمز"""
+    
+    template_name = 'employ/employee_change_password.html'
+    
+    def get(self, request, pk):
+        employee = get_object_or_404(Employee, pk=pk)
+        
+        # التحقق من الصلاحية
+        if request.user != employee.user and not request.user.is_superuser:
+            messages.error(request, 'لا يمكنك تغيير كلمة مرور موظف آخر')
+            return redirect('employ:employee_profile', pk=pk)
+        
+        password_form = EmployeePasswordChangeForm(user=employee.user)
+        code_form = OneTimeCodeForm(employee=employee, purpose='password_change')
+        
+        return render(request, self.template_name, {
+            'employee': employee,
+            'password_form': password_form,
+            'code_form': code_form,
+        })
+    
+    def post(self, request, pk):
+        employee = get_object_or_404(Employee, pk=pk)
+        
+        # التحقق من الصلاحية
+        if request.user != employee.user and not request.user.is_superuser:
+            messages.error(request, 'لا يمكنك تغيير كلمة مرور موظف آخر')
+            return redirect('employ:employee_profile', pk=pk)
+        
+        password_form = EmployeePasswordChangeForm(employee.user, request.POST)
+        code_form = OneTimeCodeForm(employee=employee, purpose='password_change', data=request.POST)
+        
+        if password_form.is_valid() and code_form.is_valid():
+            # استخدام الرمز
+            if code_form.use_code():
+                password_form.save()
+                messages.success(request, 'تم تغيير كلمة المرور بنجاح')
+                
+                # تسجيل الخروج وإعادة التوجيه لتسجيل الدخول
+                from django.contrib.auth import logout
+                logout(request)
+                messages.info(request, 'يرجى تسجيل الدخول بكلمة المرور الجديدة')
+                return redirect('login')
+            else:
+                messages.error(request, 'فشل في استخدام رمز التحقق')
+        
+        return render(request, self.template_name, {
+            'employee': employee,
+            'password_form': password_form,
+            'code_form': code_form,
+        })
+
+
+class GenerateOneTimeCodeView(LoginRequiredMixin, View):
+    """إنشاء رمز استخدام واحد للموظف - للمشرفين فقط"""
+    
+    template_name = 'employ/generate_one_time_code.html'
+    
+    def get(self, request, employee_id):
+        # التحقق من صلاحية المشرف
+        if not request.user.is_superuser:
+            messages.error(request, 'هذه الصفحة مخصصة للمشرفين فقط')
+            return redirect('employ:hr')
+        
+        employee = get_object_or_404(Employee, pk=employee_id)
+        
+        # الحصول على الرموز الحالية
+        from .models import OneTimeCode
+        active_codes = OneTimeCode.objects.filter(
+            employee=employee,
+            is_used=False,
+            expires_at__gt=timezone.now()
+        ).order_by('-created_at')
+        
+        return render(request, self.template_name, {
+            'employee': employee,
+            'active_codes': active_codes,
+        })
+    
+    def post(self, request, employee_id):
+        # التحقق من صلاحية المشرف
+        if not request.user.is_superuser:
+            messages.error(request, 'هذه الصفحة مخصصة للمشرفين فقط')
+            return redirect('employ:hr')
+        
+        employee = get_object_or_404(Employee, pk=employee_id)
+        purpose = request.POST.get('purpose')
+        expires_hours = int(request.POST.get('expires_hours', 24))
+        
+        if purpose not in ['name_change', 'password_change', 'profile_edit']:
+            messages.error(request, 'غرض غير صالح')
+            return redirect('employ:generate_one_time_code', employee_id=employee_id)
+        
+        try:
+            from .models import OneTimeCode
+            one_time_code = OneTimeCode.generate_code(
+                employee=employee,
+                purpose=purpose,
+                created_by=request.user,
+                expires_hours=expires_hours
+            )
+            
+            messages.success(
+                request,
+                f'تم إنشاء رمز جديد: {one_time_code.code} '
+                f'للموظف {employee.full_name} '
+                f'لغرض {one_time_code.get_purpose_display()}'
+            )
+            
+        except Exception as e:
+            messages.error(request, f'فشل في إنشاء الرمز: {e}')
+        
+        return redirect('employ:generate_one_time_code', employee_id=employee_id)
 
 
 # -----------------------------
@@ -501,6 +690,13 @@ class EmployeeProfileView(LoginRequiredMixin, DetailView):
             (9, 'أيلول'), (10, 'تشرين الأول'), (11, 'تشرين الثاني'), (12, 'كانون الأول')
         ]
 
+        # الحصول على الرموز النشطة
+        from .models import OneTimeCode
+        active_codes = OneTimeCode.objects.filter(
+            employee=employee,
+            is_used=False,
+            expires_at__gt=timezone.now()
+        ).order_by('-created_at')
         context.update({
             'salary_year': salary_year,
             'salary_month': salary_month,
@@ -530,6 +726,8 @@ class EmployeeProfileView(LoginRequiredMixin, DetailView):
             'outstanding_advances_count': len(outstanding_advances),
             'months': months,
             'today': today,
+            'active_codes': active_codes,
+            'can_edit_profile': (self.request.user == employee.user or self.request.user.is_superuser),
         })
         return context
 
